@@ -1,0 +1,91 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+.Python
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Byte-compiled and package files
+*.log
+*.out
+*.tmp
+*.bak
+*.swp
+
+# Unit test cache
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# MyPy and Pylint
+.mypy_cache/
+.pylint.d/
+
+# VSCode and IDEs
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# === Spark ===
+.metastore_db/
+derby.log
+
+# === Docker ===
+*.pid
+*.pid.lock
+docker-compose.override.yml
+docker-compose.local.yml
+.env
+.env.*
+
+# Ignore local Kafka logs/data
+kafka-logs/
+kafka-data/
+zookeeper-data/
+zookeeper-logs/
+
+# === Parquet / Data Files ===
+*.parquet
+*.orc
+*.avro
+*.csv
+*.tsv
+*.json
+*.xml
+*.zip
+*.gz
+*.snappy
+*.lz4
+
+# === Notebooks / Experiments / Temp Data ===
+notebooks/__pycache__/
+*.ipynb_checkpoints
+*.nbconvert.ipynb
+experiments/
+temp/
+tmp/
+output/
+logs/
+
+# === OS generated ===
+.DS_Store
+Thumbs.db
+desktop.ini
