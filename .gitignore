@@ -89,3 +89,15 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+
+
+processing/data/minio/
+
+processing/data/
+
+orchestration/data/
+
+*.log
+
+.env
