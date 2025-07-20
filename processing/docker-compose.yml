@@ -1,0 +1,88 @@
+
+services:
+  spark-master:
+    container_name: chainalytics-spark-master
+    build: .
+    image: chainalytics-spark-image
+    entrypoint: ['./entrypoint.sh', 'master']
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - ./book_data:/opt/spark/data
+      - ./spark_apps:/opt/spark/apps
+      - ./jobs:/opt/spark/jobs        
+      - ../streaming/producers:/opt/spark/producers  # ← ADD THIS LINE
+
+      - ./spark_jars:/opt/spark/jars/iceberg  # ADD THIS LINE
+
+      - spark-logs:/opt/spark/spark-events
+    env_file:
+      - .env.spark
+    ports:
+      - '9090:8080'  # Spark Master Web UI (avoiding conflict with Airflow's 8080)
+      - '7077:7077'  # Spark Master port
+    networks:
+      - chainalytics-network
+    depends_on:
+      - minio
+
+  spark-history-server:
+    container_name: chainalytics-spark-history
+    image: chainalytics-spark-image
+    entrypoint: ['./entrypoint.sh', 'history']
+    depends_on:
+      - spark-master
+    env_file:
+      - .env.spark
+    volumes:
+      - spark-logs:/opt/spark/spark-events
+    ports:
+      - '18080:18080'  # Spark History Server
+    networks:
+      - chainalytics-network
+
+  spark-worker:
+    image: chainalytics-spark-image
+    entrypoint: ['./entrypoint.sh', 'worker']
+    depends_on:
+      - spark-master
+    env_file:
+      - .env.spark
+    volumes:
+      - ./book_data:/opt/spark/data
+      - ./spark_apps:/opt/spark/apps
+      - spark-logs:/opt/spark/spark-events
+      - ../streaming/producers:/opt/spark/producers  # ← ADD THIS LINE
+
+    networks:
+      - chainalytics-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: chainalytics-minio
+    ports:
+      - "9000:9000"  # MinIO API
+      - "9001:9001"  # MinIO Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./data/minio:/data
+    networks:
+      - chainalytics-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+volumes:
+  spark-logs:
+
+networks:
+  chainalytics-network:
+    external: true

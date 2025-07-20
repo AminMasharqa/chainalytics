@@ -1,0 +1,43 @@
+# Use official Spark image with Python support
+FROM apache/spark:3.5.0-python3
+
+USER root
+
+# Update package lists and install wget (if not present)
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+
+# Install additional Python packages
+RUN pip install --no-cache-dir \
+    boto3 \
+    minio \
+    pandas \
+    pyarrow \
+    numpy \
+    ipython
+
+# Download required JARs for Iceberg and AWS S3/MinIO support
+# Create a temporary directory to download JARs
+RUN mkdir -p /tmp/jars && \
+    wget -O /tmp/jars/iceberg-spark-runtime-3.5_2.12-1.5.2.jar \
+    "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/1.5.2/iceberg-spark-runtime-3.5_2.12-1.5.2.jar" && \
+    wget -O /tmp/jars/hadoop-aws-3.3.4.jar \
+    "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar" && \
+    wget -O /tmp/jars/aws-java-sdk-bundle-1.12.367.jar \
+    "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.367/aws-java-sdk-bundle-1.12.367.jar" && \
+    mv /tmp/jars/*.jar $SPARK_HOME/jars/ && \
+    rm -rf /tmp/jars
+
+# Verify JARs were downloaded successfully
+RUN ls -la $SPARK_HOME/jars/iceberg* && \
+    ls -la $SPARK_HOME/jars/hadoop-aws* && \
+    ls -la $SPARK_HOME/jars/aws-java-sdk*
+
+# Copy configurations
+COPY conf/spark-defaults.conf $SPARK_HOME/conf/
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+# Set Python path
+ENV PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
+
+ENTRYPOINT ["./entrypoint.sh"]
