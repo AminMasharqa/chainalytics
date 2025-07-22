@@ -31,7 +31,12 @@ table_paths = [
     "s3a://warehouse/chainalytics.db/bronze_products/", 
     "s3a://warehouse/chainalytics.db/bronze_user_events/",
     "s3a://warehouse/chainalytics.db/bronze_user_posts/",
-    "s3a://warehouse/chainalytics.db/bronze_weather_data/"
+    "s3a://warehouse/chainalytics.db/bronze_weather_data/",
+    "s3a://warehouse/chainalytics.db/gold_daily_summary/",
+    "s3a://warehouse/chainalytics.db/gold_customer_analytics/",
+    "s3a://warehouse/chainalytics.db/gold_executive_dashboard/",
+    "s3a://warehouse/chainalytics.db/gold_product_performance/",
+    "s3a://warehouse/chainalytics.db/gold_weather_correlation/",
 ]
 
 def explore_table(table_path, table_name):
@@ -102,7 +107,7 @@ for i, table_path in enumerate(table_paths):
     
     # Add separator between tables
     if i < len(table_paths) - 1:
-        print("\n" + "🔸" * 60)
+        print("\n" + "=" * 60)
 
 # # Method 2: Try reading with wildcard patterns
 # print("\n2️⃣ METHOD 2: Reading with wildcard patterns")
@@ -171,3 +176,5 @@ for i, table_path in enumerate(table_paths):
 
 print("\n✅ Data exploration complete!")
 spark.stop()
+
+

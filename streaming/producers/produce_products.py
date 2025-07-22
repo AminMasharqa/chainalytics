@@ -1,11 +1,10 @@
-# produce_products.py
+# Fixed produce_products.py
 import json
 import random
 import time
 from datetime import datetime, timezone
 from kafka import KafkaProducer
 
-# Kafka configuration
 producer = KafkaProducer(
     bootstrap_servers=['kafka:29092'],
     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
@@ -15,7 +14,7 @@ producer = KafkaProducer(
 CATEGORIES = ["Electronics", "Books", "Clothing", "Home", "Sports", "Toys"]
 
 def generate_product():
-    ingestion_time = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
     product = {
         "product_id": random.randint(1, 10000),
         "title": f"Product {random.randint(1, 1000)}",
@@ -23,7 +22,8 @@ def generate_product():
         "category": random.choice(CATEGORIES),
         "rating_score": round(random.uniform(1.0, 5.0), 2),
         "rating_count": random.randint(0, 5000),
-        "ingestion_timestamp": ingestion_time.strftime('%Y-%m-%d %H:%M:%S'),
+        "ingestion_date": now.strftime('%Y-%m-%d'),  # ✅ Added missing field
+        # Note: ingestion_timestamp will be added by Spark pipeline
     }
     return product
 

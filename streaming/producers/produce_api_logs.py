@@ -1,4 +1,4 @@
-# produce_api_logs.py
+# Fixed produce_api_logs.py
 import json
 import random
 import time
@@ -6,7 +6,6 @@ import uuid
 from datetime import datetime, timezone
 from kafka import KafkaProducer
 
-# Kafka configuration
 producer = KafkaProducer(
     bootstrap_servers=['kafka:29092'],
     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
@@ -21,9 +20,9 @@ def generate_api_log():
         "log_id": str(uuid.uuid4()),
         "api_source": random.choice(API_SOURCES),
         "response_time_ms": random.randint(10, 2000),
-        "success_flag": random.choice([True, True, True, False]),  # mostly successes
+        "success_flag": random.choice([True, True, True, False]),
         "call_timestamp": now.strftime('%Y-%m-%d %H:%M:%S'),
-        "ingestion_timestamp": now.strftime('%Y-%m-%d %H:%M:%S'),
+        # ✅ Removed ingestion_timestamp - Spark will add this
     }
     return log
 

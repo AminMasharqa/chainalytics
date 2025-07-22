@@ -64,11 +64,11 @@ start_kafka_to_bronze = BashOperator(
 )
 
 # Task 2: Start Late Data Handler
-start_late_data_handler = BashOperator(
-    task_id='start_late_data_handler',
-    bash_command='docker exec -d chainalytics-spark-master /opt/spark/bin/spark-submit --master spark://chainalytics-spark-master:7077 --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 --conf spark.sql.streaming.checkpointLocation=/tmp/spark-checkpoints/late-data /opt/spark/jobs/streaming/late_data_handler.py',
-    dag=dag,
-)
+# start_late_data_handler = BashOperator(
+#     task_id='start_late_data_handler',
+#     bash_command='docker exec -d chainalytics-spark-master /opt/spark/bin/spark-submit --master spark://chainalytics-spark-master:7077 --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 --conf spark.sql.streaming.checkpointLocation=/tmp/spark-checkpoints/late-data /opt/spark/jobs/streaming/late_data_handler.py',
+#     dag=dag,
+# )
 
 # Task 3: Verify Streaming Jobs are Running
 verify_streaming_jobs = BashOperator(
@@ -109,4 +109,5 @@ end_processing = EmptyOperator(
 # =============================================================================
 
 # Simple sequential flow - exactly like your table creation DAG
-start_processing >> start_kafka_to_bronze >> start_late_data_handler >> verify_streaming_jobs >> end_processing
+# start_processing >> start_kafka_to_bronze >> start_late_data_handler >> verify_streaming_jobs >> end_processing
+start_processing >> start_kafka_to_bronze >> verify_streaming_jobs >> end_processing

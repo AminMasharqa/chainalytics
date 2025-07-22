@@ -16,3 +16,4 @@ spark = SparkSession.builder \
 
 spark.sql("USE chainalytics.db")
 spark.sql("SHOW TABLES").show()
+0000000
