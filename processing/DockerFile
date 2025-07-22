@@ -1,4 +1,4 @@
-# Use official Spark image with Python support
+#!/bin/bash
 FROM apache/spark:3.5.0-python3
 
 USER root

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-ChainAnalytics Table Creation DAG
-Creates Bronze, Silver, and Gold tables for the ChainAnalytics platform.
+Simple DAG for ChainAnalytics Complete Data Platform Setup
+Creates Bronze, Silver, and Gold tables in warehouse catalog
 """
 
 from airflow import DAG
@@ -10,57 +10,71 @@ from airflow.operators.empty import EmptyOperator
 from datetime import datetime, timedelta
 
 default_args = {
-    'owner': 'chainalytics-data-team',
+    'owner': 'chainalytics-team',
     'depends_on_past': False,
-    'start_date': datetime(2025, 1, 15),
-    'email': ['data-team@chainalytics.com', 'devops@chainalytics.com'],
-    'email_on_failure': True,
+    'start_date': datetime(2025, 7, 20),
+    'email_on_failure': False,
     'email_on_retry': False,
-    'retries': 3,
-    'retry_delay': timedelta(minutes=5),
-    'retry_exponential_backoff': True,
-    'max_retry_delay': timedelta(minutes=30),
-    'execution_timeout': timedelta(hours=4),
+    'retries': 1,
+    'retry_delay': timedelta(minutes=2),
+    'execution_timeout': timedelta(minutes=30),
 }
 
 dag = DAG(
-    dag_id='chainalytics_table_setup',
+    dag_id='simple_warehouse_setup35',
     default_args=default_args,
-    description='Creates Bronze, Silver, and Gold tables for ChainAnalytics data platform',
-    schedule=None,
+    description='Complete warehouse setup: Bronze, Silver, Gold tables',
+    schedule=None,  # Manual trigger
     catchup=False,
     max_active_runs=1,
-    max_active_tasks=6,
-    tags=['chainalytics', 'table-creation', 'setup', 'data-platform'],
+    tags=['warehouse', 'bronze', 'silver', 'gold', 'setup'],
 )
 
-start_setup = EmptyOperator(
+start_task = EmptyOperator(
     task_id='start_setup',
     dag=dag
 )
 
+# Create bronze tables
 create_bronze_tables = BashOperator(
     task_id='create_bronze_tables',
-    bash_command='docker exec chainalytics-spark-master /opt/spark/bin/spark-submit /opt/spark/jobs/setup/create_bronze_tables.py',
+    bash_command=(
+        "docker exec -i chainalytics-spark-master "
+        "/opt/spark/bin/spark-submit "
+        "--jars /opt/spark/jars/iceberg/* "
+        "/opt/spark/jobs/setup/create_bronze_tables.py"
+    ),
     dag=dag,
 )
 
+# Create silver tables
 create_silver_tables = BashOperator(
     task_id='create_silver_tables',
-    bash_command='docker exec chainalytics-spark-master /opt/spark/bin/spark-submit /opt/spark/jobs/setup/create_silver_tables.py',
+    bash_command=(
+        "docker exec -i chainalytics-spark-master "
+        "/opt/spark/bin/spark-submit "
+        "--jars /opt/spark/jars/iceberg/* "
+        "/opt/spark/jobs/setup/create_silver_tables.py"
+    ),
     dag=dag,
 )
 
+# Create gold tables
 create_gold_tables = BashOperator(
     task_id='create_gold_tables',
-    bash_command='docker exec chainalytics-spark-master /opt/spark/bin/spark-submit /opt/spark/jobs/setup/create_gold_tables.py',
+    bash_command=(
+        "docker exec -i chainalytics-spark-master "
+        "/opt/spark/bin/spark-submit "
+        "--jars /opt/spark/jars/iceberg/* "
+        "/opt/spark/jobs/setup/create_gold_tables.py"
+    ),
     dag=dag,
 )
 
-end_setup = EmptyOperator(
+end_task = EmptyOperator(
     task_id='end_setup',
     dag=dag
 )
 
-# DAG execution flow
-start_setup >> create_bronze_tables >> create_silver_tables >> create_gold_tables >> end_setup
+# Task dependencies - Sequential execution
+start_task >> create_bronze_tables >> create_silver_tables >> create_gold_tables >> end_task

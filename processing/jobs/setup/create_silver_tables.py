@@ -1,137 +1,142 @@
 #!/usr/bin/env python3
 """
-Create Silver layer tables for ChainAnalytics project
-Silver layer: Cleaned, validated, and standardized data
-Location: jobs/setup/create_silver_tables.py
+Simple Silver Tables Creation for ChainAnalytics
+Creates silver tables in 'warehouse' catalog
+Location: jobs/setup/create_silver_tables_simple.py
 """
 
-import sys
-sys.path.append('/opt/spark/jobs/utils')
-
-from spark_config import spark_config
+from pyspark.sql import SparkSession
 import logging
 
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def create_silver_tables():
-    """Create all silver layer tables with ingestion timestamps"""
+def create_spark_session():
+    """Create Spark session with Iceberg configuration"""
+    spark = SparkSession.builder \
+        .appName("SilverTablesCreation") \
+        .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+        .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkCatalog") \
+        .config("spark.sql.catalog.spark_catalog.type", "hadoop") \
+        .config("spark.sql.catalog.spark_catalog.warehouse", "s3a://warehouse/") \
+        .getOrCreate()
     
-    logger.info("Starting silver tables creation")
+    # Configure S3/MinIO settings
+    spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.access.key", "minioadmin")
+    spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.secret.key", "minioadmin")
+    spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.endpoint", "http://minio:9000")
+    spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.connection.ssl.enabled", "false")
+    spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.path.style.access", "true")
+    spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.attempts.maximum", "1")
+    spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.connection.establish.timeout", "5000")
+    spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.connection.timeout", "10000")
+    
+    return spark
+
+def create_silver_tables():
+    """Create all silver layer tables"""
+    
+    logger.info("🚀 Starting silver tables creation")
+    
+    spark = create_spark_session()
     
     try:
-        spark = spark_config.create_spark_session("SilverTableSetup")
+        # Create database in the default catalog
+        # spark.sql("CREATE DATABASE IF NOT EXISTS chainalytics")
+        spark.sql("USE chainalytics")
+        logger.info("✅ Using database: chainalytics")
         
-        # Silver Product Performance
+        # 1. Silver User Behavior
         spark.sql("""
-            CREATE TABLE IF NOT EXISTS iceberg_catalog.chainalytics.silver_product_performance (
-                product_key STRING,
-                product_name STRING,
-                price_tier STRING,
-                category_std STRING,
-                popularity_score DOUBLE,
-                quality_rating STRING,
-                last_updated DATE,
-                ingestion_timestamp TIMESTAMP
-            )
-            USING ICEBERG
-            PARTITIONED BY (category_std, price_tier)
-            TBLPROPERTIES (
-                'write.format.default' = 'parquet',
-                'write.upsert.enabled' = 'true'
-            )
-        """)
-        logger.info("✅ Created silver_product_performance")
-        
-        # Silver User Sessions
-        spark.sql("""
-            CREATE TABLE IF NOT EXISTS iceberg_catalog.chainalytics.silver_user_sessions (
-                session_id STRING,
+            CREATE TABLE IF NOT EXISTS silver_user_behavior (
                 user_id STRING,
-                session_duration_min INTEGER,
                 total_events INTEGER,
-                conversion_flag BOOLEAN,
-                session_start TIMESTAMP,
+                unique_products_viewed INTEGER,
+                avg_session_duration DOUBLE,
+                last_activity_date DATE,
+                user_segment STRING,
                 ingestion_timestamp TIMESTAMP
             )
             USING ICEBERG
-            PARTITIONED BY (date(session_start), conversion_flag)
+            PARTITIONED BY (user_segment)
             TBLPROPERTIES (
-                'write.format.default' = 'parquet',
-                'write.upsert.enabled' = 'true'
+                'write.format.default' = 'parquet'
             )
         """)
-        logger.info("✅ Created silver_user_sessions")
+        logger.info("✅ Created table: chainalytics.silver_user_behavior")
         
-        # Silver Logistics Impact
+        # 2. Silver Product Analytics
         spark.sql("""
-            CREATE TABLE IF NOT EXISTS iceberg_catalog.chainalytics.silver_logistics_impact (
-                impact_id STRING,
-                location STRING,
-                weather_risk_score INTEGER,
-                delay_hours INTEGER,
-                impact_timestamp TIMESTAMP,
+            CREATE TABLE IF NOT EXISTS silver_product_analytics (
+                product_id INTEGER,
+                product_name STRING,
+                category STRING,
+                current_price DOUBLE,
+                avg_rating DOUBLE,
+                total_views INTEGER,
+                total_purchases INTEGER,
+                conversion_rate DOUBLE,
                 ingestion_timestamp TIMESTAMP
             )
             USING ICEBERG
-            PARTITIONED BY (location, weather_risk_score)
+            PARTITIONED BY (category)
             TBLPROPERTIES (
-                'write.format.default' = 'parquet',
-                'write.upsert.enabled' = 'true'
+                'write.format.default' = 'parquet'
             )
         """)
-        logger.info("✅ Created silver_logistics_impact")
+        logger.info("✅ Created table: chainalytics.silver_product_analytics")
         
-        # Silver Customer Behavior
+        # 3. Silver Weather Impact
         spark.sql("""
-            CREATE TABLE IF NOT EXISTS iceberg_catalog.chainalytics.silver_customer_behavior (
-                customer_id STRING,
-                engagement_level STRING,
-                avg_session_min INTEGER,
-                purchase_frequency INTEGER,
-                preferred_category STRING,
-                first_activity DATE,
+            CREATE TABLE IF NOT EXISTS silver_weather_impact (
+                location_id STRING,
+                date DATE,
+                avg_temperature DOUBLE,
+                weather_category STRING,
+                delivery_delay_hours INTEGER,
+                impact_score DOUBLE,
                 ingestion_timestamp TIMESTAMP
             )
             USING ICEBERG
-            PARTITIONED BY (engagement_level, preferred_category)
+            PARTITIONED BY (weather_category)
             TBLPROPERTIES (
-                'write.format.default' = 'parquet',
-                'write.upsert.enabled' = 'true'
+                'write.format.default' = 'parquet'
             )
         """)
-        logger.info("✅ Created silver_customer_behavior")
+        logger.info("✅ Created table: chainalytics.silver_weather_impact")
         
-        # Silver System Health
+        # 4. Silver API Performance
         spark.sql("""
-            CREATE TABLE IF NOT EXISTS iceberg_catalog.chainalytics.silver_system_health (
-                health_id STRING,
-                api_availability DOUBLE,
-                avg_response_time INTEGER,
-                measurement_time TIMESTAMP,
+            CREATE TABLE IF NOT EXISTS silver_api_performance (
+                api_source STRING,
+                date DATE,
+                total_calls INTEGER,
+                avg_response_time_ms DOUBLE,
+                success_rate DOUBLE,
+                error_count INTEGER,
+                performance_grade STRING,
                 ingestion_timestamp TIMESTAMP
             )
             USING ICEBERG
-            PARTITIONED BY (date(measurement_time))
+            PARTITIONED BY (api_source)
             TBLPROPERTIES (
-                'write.format.default' = 'parquet',
-                'write.upsert.enabled' = 'true'
+                'write.format.default' = 'parquet'
             )
         """)
-        logger.info("✅ Created silver_system_health")
+        logger.info("✅ Created table: chainalytics.silver_api_performance")
         
-        # Show all tables
-        logger.info("📊 All Silver tables:")
-        spark.sql("SHOW TABLES IN iceberg_catalog.chainalytics").filter("tableName LIKE 'silver%'").show()
+        # Show all tables created
+        logger.info("📊 All Silver tables created:")
+        spark.sql("SHOW TABLES").show()
         
-        logger.info("Silver layer tables created successfully with ingestion timestamps!")
+        logger.info("✅ Silver tables creation completed successfully!")
         
     except Exception as e:
-        logger.error(f"Error creating silver tables: {str(e)}")
+        logger.error(f"❌ Error creating silver tables: {str(e)}")
         raise
     finally:
-        if 'spark' in locals():
-            spark.stop()
+        spark.stop()
 
 if __name__ == "__main__":
     create_silver_tables()

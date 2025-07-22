@@ -1,53 +1,105 @@
 #!/usr/bin/env python3
 """
-Spark Configuration Utility
-Centralized Spark session configuration for ChainAnalytics
-Location: jobs/utils/spark_config.py
+Simple Spark Config - Creates warehouse bucket and chainalytics database
+Matches the entrypoint.sh setup with iceberg catalog
 """
 
 from pyspark.sql import SparkSession
-import os
+import logging
 
-class SparkConfig:
-    """Centralized Spark configuration management"""
-    
-    def __init__(self):
-        self.app_name = "ChainAnalytics"
-        # Fixed to match Docker container names
-        self.master = os.getenv('SPARK_MASTER', 'spark://chainalytics-spark-master:7077')
-        self.minio_endpoint = os.getenv('MINIO_ENDPOINT', 'http://chainalytics-minio:9000')
-        self.minio_access_key = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
-        self.minio_secret_key = os.getenv('MINIO_SECRET_KEY', 'minioadmin')
-    
-    def create_spark_session(self, app_name=None):
-        """Create Spark session with Iceberg and MinIO configuration"""
-        
-        if app_name:
-            session_name = f"{self.app_name}_{app_name}"
-        else:
-            session_name = self.app_name
-            
-        spark = SparkSession.builder \
-            .appName(session_name) \
-            .master(self.master) \
-            .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
-            .config("spark.sql.catalog.iceberg_catalog", "org.apache.iceberg.spark.SparkCatalog") \
-            .config("spark.sql.catalog.iceberg_catalog.type", "hadoop") \
-            .config("spark.sql.catalog.iceberg_catalog.warehouse", "s3a://chainalytics/warehouse/") \
-            .config("spark.hadoop.fs.s3a.endpoint", self.minio_endpoint) \
-            .config("spark.hadoop.fs.s3a.access.key", self.minio_access_key) \
-            .config("spark.hadoop.fs.s3a.secret.key", self.minio_secret_key) \
-            .config("spark.hadoop.fs.s3a.path.style.access", "true") \
-            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-            .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
-            .config("spark.sql.adaptive.enabled", "true") \
-            .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
-            .getOrCreate()
-            
-        # Set log level to reduce noise
-        spark.sparkContext.setLogLevel("WARN")
-        
-        return spark
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Global instance for easy import
-spark_config = SparkConfig()
+def setup_warehouse():
+    """Creates warehouse bucket and chainalytics database"""
+    # Get existing Spark session (created by spark-submit)
+    spark = SparkSession.getActiveSession()
+    if spark is None:
+        spark = SparkSession.builder.getOrCreate()
+    
+    try:
+        # Debug: Print the current warehouse configuration
+        warehouse_location = spark.conf.get("spark.sql.catalog.iceberg.warehouse")
+        logger.info(f"🔍 Warehouse location: {warehouse_location}")
+        
+        # First test basic S3 connectivity with a simple operation
+        logger.info("🔍 Testing basic S3 connectivity...")
+        try:
+            # Try to create a simple DataFrame and write to S3 as a test
+            test_df = spark.createDataFrame([(1, "test")], ["id", "message"])
+            test_df.write.mode("overwrite").parquet("s3a://warehouse/test_connectivity/")
+            logger.info("✅ S3 connectivity works!")
+            
+        except Exception as e:
+            logger.error(f"❌ S3 connectivity failed: {e}")
+            raise
+        
+        # Now try Iceberg operations - matching your entrypoint.sh catalog name
+        logger.info("🔍 Testing Iceberg catalog...")
+        try:
+            # Test if iceberg catalog is accessible (matches your --conf spark.sql.catalog.iceberg)
+            spark.sql("SHOW NAMESPACES IN iceberg").show()
+            logger.info("✅ Iceberg catalog accessible!")
+        except Exception as e:
+            logger.info(f"ℹ️ No existing namespaces yet: {e}")
+        
+        # Create chainalytics namespace using the iceberg catalog
+        logger.info("📁 Creating Iceberg namespace: chainalytics")
+        spark.sql("CREATE NAMESPACE IF NOT EXISTS iceberg.chainalytics")
+        logger.info("✅ Created namespace: iceberg.chainalytics")
+        
+        # Verify namespace was created
+        logger.info("🔍 Checking namespaces in iceberg catalog...")
+        try:
+            namespaces = spark.sql("SHOW NAMESPACES IN iceberg").collect()
+            logger.info("📋 Available namespaces:")
+            for ns in namespaces:
+                logger.info(f"  - {ns.namespace}")
+        except Exception as e:
+            logger.warning(f"Could not list namespaces: {e}")
+        
+        # Create a table in the iceberg.chainalytics namespace
+        logger.info("📋 Creating init table in iceberg.chainalytics...")
+        spark.sql("""
+            CREATE TABLE IF NOT EXISTS iceberg.chainalytics.init_table (
+                id INT,
+                status STRING,
+                created_at TIMESTAMP
+            ) USING iceberg
+            PARTITIONED BY (created_at)
+        """)
+        
+        # Insert test data
+        logger.info("💾 Inserting test data...")
+        spark.sql("""
+            INSERT INTO iceberg.chainalytics.init_table 
+            VALUES (1, 'warehouse_ready', current_timestamp())
+        """)
+        
+        # Verify the table was created and has data
+        logger.info("🔍 Verifying table creation...")
+        result = spark.sql("SELECT * FROM iceberg.chainalytics.init_table").collect()
+        logger.info(f"📊 Table has {len(result)} rows")
+        for row in result:
+            logger.info(f"  - ID: {row.id}, Status: {row.status}")
+        
+        # Show tables in the namespace
+        logger.info("📋 Tables in iceberg.chainalytics:")
+        spark.sql("SHOW TABLES IN iceberg.chainalytics").show()
+        
+        logger.info("🎉 SUCCESS: Warehouse and ChainAnalytics database created!")
+        logger.info("📍 MinIO UI: http://localhost:9001")
+        logger.info("📁 Check bucket: warehouse")
+        logger.info("📂 Check folder: chainalytics/init_table/")
+        
+    except Exception as e:
+        logger.error(f"❌ Setup failed: {e}")
+        logger.error(f"❌ Exception type: {type(e)}")
+        import traceback
+        logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+        raise
+    finally:
+        spark.stop()
+
+if __name__ == "__main__":
+    setup_warehouse()

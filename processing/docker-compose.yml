@@ -1,10 +1,53 @@
-
 services:
+  minio-init:
+    image: minio/mc
+    container_name: chainalytics-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      
+      /bin/sh -c " sleep 3 && mc alias set local http://minio:9000 minioadmin minioadmin && if ! mc ls local/warehouse >/dev/null 2>&1; then
+        echo 'Creating warehouse bucket...' &&
+        mc mb local/warehouse;
+      else
+        echo 'Bucket warehouse already exists.';
+      fi && if ! mc ls local/warehouse/chainalytics >/dev/null 2>&1; then
+        echo 'Creating chainalytics folder (database)...';
+      else
+        echo 'chainalytics folder already exists.';
+      fi && echo 'init' > init.txt && mc cp init.txt local/warehouse/chainalytics/init.txt && rm init.txt "
+
+    networks:
+      - chainalytics-network
+    restart: "no"
+
+  # NEW: Warehouse setup service - runs once to create warehouse + chainalytics database
+  warehouse-setup:
+    container_name: chainalytics-warehouse-setup
+    image: chainalytics-spark-image
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - ./jobs:/opt/spark/jobs
+      - spark-logs:/opt/spark/spark-events # Add this volume
+    networks:
+      - chainalytics-network
+    entrypoint: [ './entrypoint.sh', 'setup' ]
+    restart: "no" # Run once only
+    environment:
+      - SPARK_MASTER_URL=spark://chainalytics-spark-master:7077
+
   spark-master:
     container_name: chainalytics-spark-master
     build: .
     image: chainalytics-spark-image
-    entrypoint: ['./entrypoint.sh', 'master']
+    entrypoint: [ './entrypoint.sh', 'master' ]
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080" ]
       interval: 5s
@@ -13,17 +56,15 @@ services:
     volumes:
       - ./book_data:/opt/spark/data
       - ./spark_apps:/opt/spark/apps
-      - ./jobs:/opt/spark/jobs        
-      - ../streaming/producers:/opt/spark/producers  # ← ADD THIS LINE
-
-      - ./spark_jars:/opt/spark/jars/iceberg  # ADD THIS LINE
-
+      - ./jobs:/opt/spark/jobs
+      - ../streaming/producers:/opt/spark/producers
+      - ./spark_jars:/opt/spark/jars/iceberg
       - spark-logs:/opt/spark/spark-events
     env_file:
       - .env.spark
     ports:
-      - '9090:8080'  # Spark Master Web UI (avoiding conflict with Airflow's 8080)
-      - '7077:7077'  # Spark Master port
+      - '9090:8080' # Spark Master Web UI
+      - '7077:7077' # Spark Master port
     networks:
       - chainalytics-network
     depends_on:
@@ -32,31 +73,32 @@ services:
   spark-history-server:
     container_name: chainalytics-spark-history
     image: chainalytics-spark-image
-    entrypoint: ['./entrypoint.sh', 'history']
+    entrypoint: [ './entrypoint.sh', 'history' ]
     depends_on:
       - spark-master
+      - warehouse-setup # Wait for warehouse setup to complete
     env_file:
       - .env.spark
     volumes:
       - spark-logs:/opt/spark/spark-events
     ports:
-      - '18080:18080'  # Spark History Server
+      - '18080:18080' # Spark History Server
     networks:
       - chainalytics-network
 
   spark-worker:
     image: chainalytics-spark-image
-    entrypoint: ['./entrypoint.sh', 'worker']
+    entrypoint: [ './entrypoint.sh', 'worker' ]
     depends_on:
       - spark-master
+      - warehouse-setup # Wait for warehouse setup to complete
     env_file:
       - .env.spark
     volumes:
       - ./book_data:/opt/spark/data
       - ./spark_apps:/opt/spark/apps
       - spark-logs:/opt/spark/spark-events
-      - ../streaming/producers:/opt/spark/producers  # ← ADD THIS LINE
-
+      - ../streaming/producers:/opt/spark/producers
     networks:
       - chainalytics-network
 
@@ -64,8 +106,8 @@ services:
     image: minio/minio:latest
     container_name: chainalytics-minio
     ports:
-      - "9000:9000"  # MinIO API
-      - "9001:9001"  # MinIO Console
+      - "9000:9000" # MinIO API
+      - "9001:9001" # MinIO Console
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -75,13 +117,14 @@ services:
     networks:
       - chainalytics-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
 
 volumes:
   spark-logs:
+
 
 networks:
   chainalytics-network:
