@@ -60,6 +60,8 @@ services:
       - ../streaming/producers:/opt/spark/producers
       - ./spark_jars:/opt/spark/jars/iceberg
       - spark-logs:/opt/spark/spark-events
+      - ./conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+
     env_file:
       - .env.spark
     ports:
@@ -81,6 +83,7 @@ services:
       - .env.spark
     volumes:
       - spark-logs:/opt/spark/spark-events
+      - ./conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
     ports:
       - '18080:18080' # Spark History Server
     networks:
@@ -99,6 +102,7 @@ services:
       - ./spark_apps:/opt/spark/apps
       - spark-logs:/opt/spark/spark-events
       - ../streaming/producers:/opt/spark/producers
+      - ./conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
     networks:
       - chainalytics-network
 

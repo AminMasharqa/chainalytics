@@ -61,53 +61,94 @@ def create_bronze_tables(spark):
     try:
         logger.info("Starting bronze table creation...")
         
-        # Create transactions table
-        logger.info("Creating transactions table...")
+        # Create bronze_user_events table
+        logger.info("Creating bronze_user_events table...")
         spark.sql("""
-            CREATE TABLE IF NOT EXISTS chainalytics.transactions (
-                id BIGINT,
-                hash STRING,
-                from_address STRING,
-                to_address STRING,
-                value STRING,
-                block_number BIGINT,
-                gas_used BIGINT,
-                gas_price BIGINT,
-                created_date DATE,
+            CREATE TABLE IF NOT EXISTS chainalytics.bronze_user_events (
+                event_id STRING,
+                user_id STRING,
+                event_type STRING,
+                product_id STRING,
+                event_timestamp TIMESTAMP,
                 ingestion_timestamp TIMESTAMP
             ) USING PARQUET
-            PARTITIONED BY (created_date)
         """)
-        logger.info("✓ Transactions table created successfully")
+        logger.info("✓ bronze_user_events table created successfully")
         
-        # Create blocks table
-        logger.info("Creating blocks table...")
+        # Create bronze_weather_data table
+        logger.info("Creating bronze_weather_data table...")
         spark.sql("""
-            CREATE TABLE IF NOT EXISTS chainalytics.blocks (
-                block_number BIGINT,
-                block_hash STRING,
-                parent_hash STRING,
-                timestamp TIMESTAMP,
-                transaction_count BIGINT,
-                created_date DATE,
+            CREATE TABLE IF NOT EXISTS chainalytics.bronze_weather_data (
+                location_id STRING,
+                weather_condition STRING,
+                temperature DOUBLE,
+                wind_speed DOUBLE,
+                data_delay_hours INTEGER,
+                observation_time TIMESTAMP,
                 ingestion_timestamp TIMESTAMP
             ) USING PARQUET
-            PARTITIONED BY (created_date)
         """)
-        logger.info("✓ Blocks table created successfully")
+        logger.info("✓ bronze_weather_data table created successfully")
+        
+        # Create bronze_products table
+        logger.info("Creating bronze_products table...")
+        spark.sql("""
+            CREATE TABLE IF NOT EXISTS chainalytics.bronze_products (
+                product_id INTEGER,
+                title STRING,
+                price DOUBLE,
+                category STRING,
+                rating_score DOUBLE,
+                rating_count INTEGER,
+                ingestion_date DATE,
+                ingestion_timestamp TIMESTAMP
+            ) USING PARQUET
+        """)
+        logger.info("✓ bronze_products table created successfully")
+        
+        # Create bronze_api_logs table
+        logger.info("Creating bronze_api_logs table...")
+        spark.sql("""
+            CREATE TABLE IF NOT EXISTS chainalytics.bronze_api_logs (
+                log_id STRING,
+                api_source STRING,
+                response_time_ms INTEGER,
+                success_flag BOOLEAN,
+                call_timestamp TIMESTAMP,
+                ingestion_timestamp TIMESTAMP
+            ) USING PARQUET
+        """)
+        logger.info("✓ bronze_api_logs table created successfully")
+        
+        # Create bronze_user_posts table
+        logger.info("Creating bronze_user_posts table...")
+        spark.sql("""
+            CREATE TABLE IF NOT EXISTS chainalytics.bronze_user_posts (
+                post_id INTEGER,
+                user_id INTEGER,
+                title STRING,
+                created_timestamp TIMESTAMP,
+                ingestion_timestamp TIMESTAMP
+            ) USING PARQUET
+        """)
+        logger.info("✓ bronze_user_posts table created successfully")
         
         # Verify tables were created
         logger.info("Verifying created tables...")
         tables = spark.sql("SHOW TABLES IN chainalytics").collect()
         table_names = [row.tableName for row in tables]
         
-        if 'transactions' in table_names and 'blocks' in table_names:
-            logger.info("✓ Both tables verified in chainalytics:")
-            for table in tables:
-                logger.info(f"  - {table.tableName}")
+        expected_tables = ['bronze_user_events', 'bronze_weather_data', 'bronze_products', 'bronze_api_logs', 'bronze_user_posts']
+        created_tables = [table for table in expected_tables if table in table_names]
+        
+        if len(created_tables) == len(expected_tables):
+            logger.info("✓ All bronze tables verified in chainalytics:")
+            for table in created_tables:
+                logger.info(f"  - {table}")
             return True
         else:
-            logger.error(f"✗ Table verification failed. Found tables: {table_names}")
+            missing_tables = [table for table in expected_tables if table not in created_tables]
+            logger.error(f"✗ Table verification failed. Missing tables: {missing_tables}")
             return False
         
     except Exception as e:
@@ -119,29 +160,65 @@ def insert_test_data(spark):
     try:
         logger.info("Inserting test data...")
         
-        # Insert test transaction
-        logger.info("Inserting test transaction...")
+        # Insert test user events
+        logger.info("Inserting test user events...")
         spark.sql("""
-            INSERT INTO chainalytics.transactions VALUES 
-            (1, 'test_hash_001', '0xabc123', '0xdef456', '1000000000000000000', 12345678, 21000, 20000000000, 
-             current_date(), current_timestamp())
+            INSERT INTO chainalytics.bronze_user_events VALUES 
+            ('evt_001', 'user_123', 'view', 'prod_456', current_timestamp(), current_timestamp()),
+            ('evt_002', 'user_124', 'purchase', 'prod_789', current_timestamp(), current_timestamp())
         """)
-        logger.info("✓ Test transaction inserted")
+        logger.info("✓ Test user events inserted")
         
-        # Insert test block
-        logger.info("Inserting test block...")
+        # Insert test weather data
+        logger.info("Inserting test weather data...")
         spark.sql("""
-            INSERT INTO chainalytics.blocks VALUES 
-            (12345678, 'block_hash_001', 'parent_hash_001', current_timestamp(), 150, 
-             current_date(), current_timestamp())
+            INSERT INTO chainalytics.bronze_weather_data VALUES 
+            ('NYC_001', 'sunny', 22.5, 15.2, 0, current_timestamp(), current_timestamp()),
+            ('LA_002', 'cloudy', 18.0, 12.8, 1, current_timestamp(), current_timestamp())
         """)
-        logger.info("✓ Test block inserted")
+        logger.info("✓ Test weather data inserted")
+        
+        # Insert test products
+        logger.info("Inserting test products...")
+        spark.sql("""
+            INSERT INTO chainalytics.bronze_products VALUES 
+            (101, 'Premium Widget', 299.99, 'electronics', 4.5, 150, current_date(), current_timestamp()),
+            (102, 'Standard Tool', 49.99, 'tools', 4.2, 85, current_date(), current_timestamp())
+        """)
+        logger.info("✓ Test products inserted")
+        
+        # Insert test API logs
+        logger.info("Inserting test API logs...")
+        spark.sql("""
+            INSERT INTO chainalytics.bronze_api_logs VALUES 
+            ('log_001', 'payment_api', 120, true, current_timestamp(), current_timestamp()),
+            ('log_002', 'inventory_api', 85, true, current_timestamp(), current_timestamp())
+        """)
+        logger.info("✓ Test API logs inserted")
+        
+        # Insert test user posts
+        logger.info("Inserting test user posts...")
+        spark.sql("""
+            INSERT INTO chainalytics.bronze_user_posts VALUES 
+            (1, 123, 'Great product review', current_timestamp(), current_timestamp()),
+            (2, 124, 'Product feedback', current_timestamp(), current_timestamp())
+        """)
+        logger.info("✓ Test user posts inserted")
         
         # Verify data insertion
-        tx_count = spark.sql("SELECT COUNT(*) as count FROM chainalytics.transactions").collect()[0]['count']
-        block_count = spark.sql("SELECT COUNT(*) as count FROM chainalytics.blocks").collect()[0]['count']
+        events_count = spark.sql("SELECT COUNT(*) as count FROM chainalytics.bronze_user_events").collect()[0]['count']
+        weather_count = spark.sql("SELECT COUNT(*) as count FROM chainalytics.bronze_weather_data").collect()[0]['count']
+        products_count = spark.sql("SELECT COUNT(*) as count FROM chainalytics.bronze_products").collect()[0]['count']
+        api_count = spark.sql("SELECT COUNT(*) as count FROM chainalytics.bronze_api_logs").collect()[0]['count']
+        posts_count = spark.sql("SELECT COUNT(*) as count FROM chainalytics.bronze_user_posts").collect()[0]['count']
         
-        logger.info(f"✓ Data verification - Transactions: {tx_count}, Blocks: {block_count}")
+        logger.info("✓ Data verification:")
+        logger.info(f"  - User Events: {events_count} records")
+        logger.info(f"  - Weather Data: {weather_count} records")
+        logger.info(f"  - Products: {products_count} records")
+        logger.info(f"  - API Logs: {api_count} records")
+        logger.info(f"  - User Posts: {posts_count} records")
+        
         return True
         
     except Exception as e:
@@ -149,87 +226,39 @@ def insert_test_data(spark):
         raise
 
 def read_and_display_data(spark):
-    """Read and display sample data from tables"""
+    """Read and display sample data from all bronze tables"""
     try:
-        logger.info("Reading data from tables...")
-        
-        # Read transactions data
-        logger.info("📖 Reading transactions table...")
-        transactions_df = spark.sql("SELECT * FROM chainalytics.transactions LIMIT 5")
-        transactions_data = transactions_df.collect()
-        
-        if transactions_data:
-            logger.info("✓ Transactions table data:")
+        logger.info("Reading data from bronze tables in chainalytics database...")
+
+        bronze_tables = [
+            'bronze_user_events',
+            'bronze_weather_data',
+            'bronze_products',
+            'bronze_api_logs',
+            'bronze_user_posts'
+        ]
+
+        for table in bronze_tables:
+            logger.info(f"📖 Reading from table: {table}")
+            df = spark.sql(f"SELECT * FROM chainalytics.{table}")
+            count = df.count()
+            logger.info(f"✓ {table} contains {count} records")
+
+            if count > 0:
+                logger.info(f"🧾 Showing top records from {table}:")
+                df.show(truncate=False)
+                logger.info(f"📋 Schema for {table}:")
+                df.printSchema()
+            else:
+                logger.warning(f"⚠️ No data found in table: {table}")
             logger.info("-" * 80)
-            for i, row in enumerate(transactions_data, 1):
-                logger.info(f"  Transaction {i}:")
-                logger.info(f"    ID: {row.id}")
-                logger.info(f"    Hash: {row.hash}")
-                logger.info(f"    From: {row.from_address}")
-                logger.info(f"    To: {row.to_address}")
-                logger.info(f"    Value: {row.value}")
-                logger.info(f"    Block Number: {row.block_number}")
-                logger.info(f"    Gas Used: {row.gas_used}")
-                logger.info(f"    Gas Price: {row.gas_price}")
-                logger.info(f"    Created Date: {row.created_date}")
-                logger.info(f"    Ingestion Time: {row.ingestion_timestamp}")
-                logger.info("-" * 40)
-        else:
-            logger.info("⚠️ No data found in transactions table")
-        
-        # Read blocks data
-        logger.info("📖 Reading blocks table...")
-        blocks_df = spark.sql("SELECT * FROM chainalytics.blocks LIMIT 5")
-        blocks_data = blocks_df.collect()
-        
-        if blocks_data:
-            logger.info("✓ Blocks table data:")
-            logger.info("-" * 80)
-            for i, row in enumerate(blocks_data, 1):
-                logger.info(f"  Block {i}:")
-                logger.info(f"    Block Number: {row.block_number}")
-                logger.info(f"    Block Hash: {row.block_hash}")
-                logger.info(f"    Parent Hash: {row.parent_hash}")
-                logger.info(f"    Timestamp: {row.timestamp}")
-                logger.info(f"    Transaction Count: {row.transaction_count}")
-                logger.info(f"    Created Date: {row.created_date}")
-                logger.info(f"    Ingestion Time: {row.ingestion_timestamp}")
-                logger.info("-" * 40)
-        else:
-            logger.info("⚠️ No data found in blocks table")
-        
-        # Show table schemas
-        logger.info("📋 Table Schemas:")
-        logger.info("Transactions table schema:")
-        transactions_df.printSchema()
-        
-        logger.info("Blocks table schema:")
-        blocks_df.printSchema()
-        
-        # Show record counts
-        tx_total = spark.sql("SELECT COUNT(*) as count FROM chainalytics.transactions").collect()[0]['count']
-        block_total = spark.sql("SELECT COUNT(*) as count FROM chainalytics.blocks").collect()[0]['count']
-        
-        logger.info("📊 Final Record Counts:")
-        logger.info(f"  - Transactions: {tx_total} records")
-        logger.info(f"  - Blocks: {block_total} records")
-        
+
         return True
-        
+
     except Exception as e:
-        logger.error(f"✗ Failed to read data from tables: {str(e)}")
-        # raise COUNT(*) as count FROM warehouse.chainalytics.transactions").collect()[0]['count']
-        block_total = spark.sql("SELECT COUNT(*) as count FROM warehouse.chainalytics.blocks").collect()[0]['count']
-        
-        logger.info("📊 Final Record Counts:")
-        logger.info(f"  - Transactions: {tx_total} records")
-        logger.info(f"  - Blocks: {block_total} records")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"✗ Failed to read data from tables: {str(e)}")
+        logger.error(f"✗ Failed to read/display data from bronze tables: {str(e)}")
         raise
+
 
 def main():
     """Main execution function"""
@@ -257,7 +286,7 @@ def main():
         logger.info("=" * 60)
         logger.info("🎉 SUCCESS: Bronze tables created in chainalytics database!")
         logger.info("Tables stored in MinIO bucket: s3a://warehouse/chainalytics/")
-        logger.info("Tables: transactions, blocks")
+        logger.info("Tables: bronze_user_events, bronze_weather_data, bronze_products, bronze_api_logs, bronze_user_posts")
         logger.info("=" * 60)
         
     except Exception as e:
