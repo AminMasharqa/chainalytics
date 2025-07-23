@@ -51,7 +51,7 @@ services:
     networks:
       - chainalytics-network
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server kafka:29092"]
       interval: 10s
       timeout: 5s
       retries: 5
