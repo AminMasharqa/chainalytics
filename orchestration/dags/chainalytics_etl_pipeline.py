@@ -58,17 +58,12 @@ start_batch_processing = EmptyOperator(
     dag=dag
 )
 
-# Task 1: Bronze Data Ingestion
-bronze_ingestion = BashOperator(
-    task_id='bronze_ingestion',
-    bash_command='docker exec chainalytics-spark-master /opt/spark/bin/spark-submit --master spark://chainalytics-spark-master:7077 /opt/spark/jobs/batch/01_bronze_ingestion.py',
-    dag=dag,
-)
+
 
 # Task 2: Silver Data Transformation
 silver_transformation = BashOperator(
     task_id='silver_transformation',
-    bash_command='docker exec chainalytics-spark-master /opt/spark/bin/spark-submit --master spark://chainalytics-spark-master:7077 /opt/spark/jobs/batch/02_silver_transformation.py',
+    bash_command='docker exec chainalytics-spark-master /opt/spark/bin/spark-submit --master spark://chainalytics-spark-master:7077 /opt/spark/jobs/batch/etl_bronze_to_silver.py',
     dag=dag,
 )
 

@@ -77,7 +77,7 @@ def process_user_events(spark):
         # Write to bronze table
         query = parsed_df.writeStream \
             .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics.db/bronze_user_events/") \
+            .option("path", "s3a://warehouse/chainalytics/bronze_user_events/") \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/user-events/") \
             .outputMode("append") \
             .trigger(processingTime='30 seconds') \
@@ -131,7 +131,7 @@ def process_weather_data(spark):
         # Write to bronze table
         query = parsed_df.writeStream \
             .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics.db/bronze_weather_data/") \
+            .option("path", "s3a://warehouse/chainalytics/bronze_weather_data/") \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/weather-data/") \
             .outputMode("append") \
             .trigger(processingTime='30 seconds') \
@@ -187,7 +187,7 @@ def process_products(spark):
         # Write to bronze table
         query = parsed_df.writeStream \
             .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics.db/bronze_products/") \
+            .option("path", "s3a://warehouse/chainalytics/bronze_products/") \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/products/") \
             .outputMode("append") \
             .trigger(processingTime='30 seconds') \
@@ -239,7 +239,7 @@ def process_api_logs(spark):
         # Write to bronze table
         query = parsed_df.writeStream \
             .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics.db/bronze_api_logs/") \
+            .option("path", "s3a://warehouse/chainalytics/bronze_api_logs/") \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/api-logs/") \
             .outputMode("append") \
             .trigger(processingTime='30 seconds') \
@@ -289,7 +289,7 @@ def process_user_posts(spark):
         # Write to bronze table
         query = parsed_df.writeStream \
             .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics.db/bronze_user_posts/") \
+            .option("path", "s3a://warehouse/chainalytics/bronze_user_posts/") \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/user-posts/") \
             .outputMode("append") \
             .trigger(processingTime='30 seconds') \
@@ -332,7 +332,7 @@ def main():
         logger.info("  - products -> bronze_products")
         logger.info("  - api-logs -> bronze_api_logs")
         logger.info("  - user-posts -> bronze_user_posts")
-        logger.info("Data stored in MinIO: s3a://warehouse/chainalytics.db/")
+        logger.info("Data stored in MinIO: s3a://warehouse/chainalytics/")
         logger.info("=" * 60)
         
         # Wait for all queries to finish (runs indefinitely)

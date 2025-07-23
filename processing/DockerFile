@@ -27,10 +27,14 @@ RUN mkdir -p /tmp/jars && \
     mv /tmp/jars/*.jar $SPARK_HOME/jars/ && \
     rm -rf /tmp/jars
 
+
+
 # Verify JARs were downloaded successfully
 RUN ls -la $SPARK_HOME/jars/iceberg* && \
     ls -la $SPARK_HOME/jars/hadoop-aws* && \
     ls -la $SPARK_HOME/jars/aws-java-sdk*
+
+
 
 # Copy configurations
 COPY conf/spark-defaults.conf $SPARK_HOME/conf/
