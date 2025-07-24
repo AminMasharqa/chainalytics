@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Kafka to Bronze Data Pipeline
-Reads data from Kafka topics and inserts into bronze tables in MinIO warehouse
+Kafka to Bronze Data Pipeline - Iceberg Version
+Reads data from Kafka topics and inserts into Iceberg bronze tables in MinIO warehouse
 """
 
 import logging
@@ -17,29 +17,37 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 def create_spark_session():
-    """Create Spark session configured for Kafka and MinIO"""
+    """Create Spark session configured for Kafka and Iceberg/MinIO"""
     try:
-        logger.info("Creating Spark session with Kafka and MinIO configuration...")
+        logger.info("Creating Spark session with Kafka and Iceberg/MinIO configuration...")
         spark = SparkSession.builder \
-            .appName("Kafka-to-Bronze-Pipeline") \
-            .config("spark.sql.warehouse.dir", "s3a://warehouse/") \
+            .appName("Kafka-to-Iceberg-Bronze-Pipeline") \
+            .config("spark.sql.catalog.warehouse", "org.apache.iceberg.spark.SparkCatalog") \
+            .config("spark.sql.catalog.warehouse.type", "hadoop") \
+            .config("spark.sql.catalog.warehouse.warehouse", "s3a://warehouse/") \
+            .config("spark.sql.catalog.warehouse.io-impl", "org.apache.iceberg.hadoop.HadoopFileIO") \
             .config("spark.hadoop.fs.s3a.endpoint", "http://chainalytics-minio:9000") \
             .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
             .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
             .config("spark.hadoop.fs.s3a.path.style.access", "true") \
             .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
             .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+            .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+            .config("spark.sql.defaultCatalog", "warehouse") \
             .config("spark.sql.streaming.checkpointLocation", "s3a://warehouse/checkpoints/") \
             .getOrCreate()
         
-        logger.info("✓ Spark session created successfully")
+        # Set the default database
+        spark.sql("USE warehouse.chainalytics")
+        
+        logger.info("✓ Spark session created successfully with Iceberg support")
         return spark
     except Exception as e:
         logger.error(f"✗ Failed to create Spark session: {str(e)}")
         raise
 
 def process_user_events(spark):
-    """Process user-events topic and insert into bronze_user_events table"""
+    """Process user-events topic and insert into bronze_user_events Iceberg table"""
     try:
         logger.info("Setting up user-events stream...")
         
@@ -50,6 +58,7 @@ def process_user_events(spark):
             .option("kafka.bootstrap.servers", "kafka:29092") \
             .option("subscribe", "user-events") \
             .option("startingOffsets", "latest") \
+            .option("failOnDataLoss", "false") \
             .load()
         
         # Define schema for user events
@@ -72,14 +81,17 @@ def process_user_events(spark):
             col("data.product_id"),
             col("data.event_timestamp"),
             col("ingestion_timestamp")
-        )
+        ).filter(col("event_id").isNotNull())  # Filter out null records
         
-        # Write to bronze table
+        # Write to Iceberg table using foreachBatch
+        def write_to_iceberg(batch_df, batch_id):
+            batch_df.writeTo("warehouse.chainalytics.bronze_user_events") \
+                .append()
+            logger.info(f"✓ Batch {batch_id} written to bronze_user_events")
+        
         query = parsed_df.writeStream \
-            .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics/bronze_user_events/") \
+            .foreachBatch(write_to_iceberg) \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/user-events/") \
-            .outputMode("append") \
             .trigger(processingTime='30 seconds') \
             .start()
         
@@ -91,7 +103,7 @@ def process_user_events(spark):
         raise
 
 def process_weather_data(spark):
-    """Process weather-data topic and insert into bronze_weather_data table"""
+    """Process weather-data topic and insert into bronze_weather_data Iceberg table"""
     try:
         logger.info("Setting up weather-data stream...")
         
@@ -102,6 +114,7 @@ def process_weather_data(spark):
             .option("kafka.bootstrap.servers", "kafka:29092") \
             .option("subscribe", "weather-data") \
             .option("startingOffsets", "latest") \
+            .option("failOnDataLoss", "false") \
             .load()
         
         # Define schema for weather data
@@ -126,14 +139,17 @@ def process_weather_data(spark):
             col("data.data_delay_hours"),
             col("data.observation_time"),
             col("ingestion_timestamp")
-        )
+        ).filter(col("location_id").isNotNull())  # Filter out null records
         
-        # Write to bronze table
+        # Write to Iceberg table using foreachBatch
+        def write_to_iceberg(batch_df, batch_id):
+            batch_df.writeTo("warehouse.chainalytics.bronze_weather_data") \
+                .append()
+            logger.info(f"✓ Batch {batch_id} written to bronze_weather_data")
+        
         query = parsed_df.writeStream \
-            .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics/bronze_weather_data/") \
+            .foreachBatch(write_to_iceberg) \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/weather-data/") \
-            .outputMode("append") \
             .trigger(processingTime='30 seconds') \
             .start()
         
@@ -145,7 +161,7 @@ def process_weather_data(spark):
         raise
 
 def process_products(spark):
-    """Process products topic and insert into bronze_products table"""
+    """Process products topic and insert into bronze_products Iceberg table"""
     try:
         logger.info("Setting up products stream...")
         
@@ -156,6 +172,7 @@ def process_products(spark):
             .option("kafka.bootstrap.servers", "kafka:29092") \
             .option("subscribe", "products") \
             .option("startingOffsets", "latest") \
+            .option("failOnDataLoss", "false") \
             .load()
         
         # Define schema for products
@@ -182,14 +199,17 @@ def process_products(spark):
             col("data.rating_count"),
             col("data.ingestion_date"),
             col("ingestion_timestamp")
-        )
+        ).filter(col("product_id").isNotNull())  # Filter out null records
         
-        # Write to bronze table
+        # Write to Iceberg table using foreachBatch
+        def write_to_iceberg(batch_df, batch_id):
+            batch_df.writeTo("warehouse.chainalytics.bronze_products") \
+                .append()
+            logger.info(f"✓ Batch {batch_id} written to bronze_products")
+        
         query = parsed_df.writeStream \
-            .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics/bronze_products/") \
+            .foreachBatch(write_to_iceberg) \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/products/") \
-            .outputMode("append") \
             .trigger(processingTime='30 seconds') \
             .start()
         
@@ -201,7 +221,7 @@ def process_products(spark):
         raise
 
 def process_api_logs(spark):
-    """Process api-logs topic and insert into bronze_api_logs table"""
+    """Process api-logs topic and insert into bronze_api_logs Iceberg table"""
     try:
         logger.info("Setting up api-logs stream...")
         
@@ -212,6 +232,7 @@ def process_api_logs(spark):
             .option("kafka.bootstrap.servers", "kafka:29092") \
             .option("subscribe", "api-logs") \
             .option("startingOffsets", "latest") \
+            .option("failOnDataLoss", "false") \
             .load()
         
         # Define schema for API logs
@@ -234,14 +255,17 @@ def process_api_logs(spark):
             col("data.success_flag"),
             col("data.call_timestamp"),
             col("ingestion_timestamp")
-        )
+        ).filter(col("log_id").isNotNull())  # Filter out null records
         
-        # Write to bronze table
+        # Write to Iceberg table using foreachBatch
+        def write_to_iceberg(batch_df, batch_id):
+            batch_df.writeTo("warehouse.chainalytics.bronze_api_logs") \
+                .append()
+            logger.info(f"✓ Batch {batch_id} written to bronze_api_logs")
+        
         query = parsed_df.writeStream \
-            .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics/bronze_api_logs/") \
+            .foreachBatch(write_to_iceberg) \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/api-logs/") \
-            .outputMode("append") \
             .trigger(processingTime='30 seconds') \
             .start()
         
@@ -253,7 +277,7 @@ def process_api_logs(spark):
         raise
 
 def process_user_posts(spark):
-    """Process user-posts topic and insert into bronze_user_posts table"""
+    """Process user-posts topic and insert into bronze_user_posts Iceberg table"""
     try:
         logger.info("Setting up user-posts stream...")
         
@@ -264,6 +288,7 @@ def process_user_posts(spark):
             .option("kafka.bootstrap.servers", "kafka:29092") \
             .option("subscribe", "user-posts") \
             .option("startingOffsets", "latest") \
+            .option("failOnDataLoss", "false") \
             .load()
         
         # Define schema for user posts
@@ -284,14 +309,17 @@ def process_user_posts(spark):
             col("data.title"),
             col("data.created_timestamp"),
             col("ingestion_timestamp")
-        )
+        ).filter(col("post_id").isNotNull())  # Filter out null records
         
-        # Write to bronze table
+        # Write to Iceberg table using foreachBatch
+        def write_to_iceberg(batch_df, batch_id):
+            batch_df.writeTo("warehouse.chainalytics.bronze_user_posts") \
+                .append()
+            logger.info(f"✓ Batch {batch_id} written to bronze_user_posts")
+        
         query = parsed_df.writeStream \
-            .format("parquet") \
-            .option("path", "s3a://warehouse/chainalytics/bronze_user_posts/") \
+            .foreachBatch(write_to_iceberg) \
             .option("checkpointLocation", "s3a://warehouse/checkpoints/user-posts/") \
-            .outputMode("append") \
             .trigger(processingTime='30 seconds') \
             .start()
         
@@ -302,10 +330,20 @@ def process_user_posts(spark):
         logger.error(f"✗ Failed to setup user posts stream: {str(e)}")
         raise
 
+def verify_table_exists(spark, table_name):
+    """Verify that an Iceberg table exists before starting the stream"""
+    try:
+        spark.sql(f"DESCRIBE TABLE warehouse.chainalytics.{table_name}")
+        logger.info(f"✓ Table warehouse.chainalytics.{table_name} exists")
+        return True
+    except Exception as e:
+        logger.error(f"✗ Table warehouse.chainalytics.{table_name} does not exist: {str(e)}")
+        return False
+
 def main():
     """Main execution function"""
     logger.info("=" * 60)
-    logger.info("Starting Kafka to Bronze Data Pipeline")
+    logger.info("Starting Kafka to Iceberg Bronze Data Pipeline")
     logger.info("=" * 60)
     
     spark = None
@@ -315,8 +353,27 @@ def main():
         # Create Spark session
         spark = create_spark_session()
         
+        # Verify all tables exist
+        tables_to_verify = [
+            "bronze_user_events",
+            "bronze_weather_data", 
+            "bronze_products",
+            "bronze_api_logs",
+            "bronze_user_posts"
+        ]
+        
+        logger.info("Verifying Iceberg tables exist...")
+        all_tables_exist = True
+        for table in tables_to_verify:
+            if not verify_table_exists(spark, table):
+                all_tables_exist = False
+        
+        if not all_tables_exist:
+            logger.error("✗ Not all required Iceberg tables exist. Please run the table creation script first.")
+            sys.exit(1)
+        
         # Start all streaming queries
-        logger.info("Starting all Kafka streams...")
+        logger.info("Starting all Kafka to Iceberg streams...")
         
         queries.append(process_user_events(spark))
         queries.append(process_weather_data(spark))
@@ -325,14 +382,14 @@ def main():
         queries.append(process_user_posts(spark))
         
         logger.info("=" * 60)
-        logger.info("🎉 SUCCESS: All Kafka to Bronze streams are running!")
-        logger.info("Kafka Topics -> Bronze Tables Mapping:")
-        logger.info("  - user-events -> bronze_user_events")
-        logger.info("  - weather-data -> bronze_weather_data")
-        logger.info("  - products -> bronze_products")
-        logger.info("  - api-logs -> bronze_api_logs")
-        logger.info("  - user-posts -> bronze_user_posts")
-        logger.info("Data stored in MinIO: s3a://warehouse/chainalytics/")
+        logger.info("🎉 SUCCESS: All Kafka to Iceberg Bronze streams are running!")
+        logger.info("Kafka Topics -> Iceberg Bronze Tables Mapping:")
+        logger.info("  - user-events -> warehouse.chainalytics.bronze_user_events")
+        logger.info("  - weather-data -> warehouse.chainalytics.bronze_weather_data")
+        logger.info("  - products -> warehouse.chainalytics.bronze_products")
+        logger.info("  - api-logs -> warehouse.chainalytics.bronze_api_logs")
+        logger.info("  - user-posts -> warehouse.chainalytics.bronze_user_posts")
+        logger.info("Data stored as Iceberg tables in MinIO: s3a://warehouse/chainalytics/")
         logger.info("=" * 60)
         
         # Wait for all queries to finish (runs indefinitely)

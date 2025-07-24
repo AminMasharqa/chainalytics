@@ -21,7 +21,7 @@ default_args = {
 }
 
 dag = DAG(
-    dag_id='simple_warehouse_setup35',
+    dag_id='simple_warehouse_ddddddd_setup35',
     default_args=default_args,
     description='Complete warehouse setup: Bronze, Silver, Gold tables',
     schedule=None,  # Manual trigger

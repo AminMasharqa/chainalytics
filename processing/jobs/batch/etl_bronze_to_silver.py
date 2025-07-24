@@ -48,91 +48,6 @@ def create_spark_session() -> SparkSession:
         raise
 
 
-def bootstrap_silver_tables(spark: SparkSession) -> None:
-    """Create silver tables with explicit locations"""
-    logger.info("Bootstrapping Iceberg silver tables...")
-    
-    tables = [
-        {
-            "name": "silver_user_behavior",
-            "schema": """(
-                user_id STRING,
-                total_events BIGINT,
-                unique_products_viewed BIGINT,
-                last_activity_date DATE,
-                avg_session_duration DOUBLE,
-                user_segment STRING,
-                ingestion_timestamp TIMESTAMP
-            )"""
-        },
-        {
-            "name": "silver_product_analytics",
-            "schema": """(
-                product_id INT,
-                product_name STRING,
-                category STRING,
-                current_price DOUBLE,
-                avg_rating DOUBLE,
-                total_views INT,
-                total_purchases INT,
-                conversion_rate DOUBLE,
-                ingestion_timestamp TIMESTAMP
-            )"""
-        },
-        {
-            "name": "silver_weather_impact",
-            "schema": """(
-                location_id STRING,
-                date DATE,
-                avg_temperature DOUBLE,
-                weather_category STRING,
-                delivery_delay_hours INT,
-                impact_score DOUBLE,
-                ingestion_timestamp TIMESTAMP
-            )"""
-        },
-        {
-            "name": "silver_api_performance",
-            "schema": """(
-                api_source STRING,
-                date DATE,
-                total_calls BIGINT,
-                avg_response_time_ms DOUBLE,
-                success_rate DOUBLE,
-                error_count BIGINT,
-                performance_grade STRING,
-                ingestion_timestamp TIMESTAMP
-            )"""
-        },
-        {
-            "name": "silver_product_performance",
-            "schema": """(
-                product_key STRING,
-                product_name STRING,
-                price_tier STRING,
-                category_std STRING,
-                popularity_score DOUBLE,
-                quality_rating STRING,
-                last_updated DATE,
-                ingestion_timestamp TIMESTAMP
-            )"""
-        }
-    ]
-    
-    for table in tables:
-        try:
-            spark.sql(f"""
-                CREATE TABLE IF NOT EXISTS `warehouse`.`chainalytics`.`{table['name']}` 
-                {table['schema']}
-                USING ICEBERG
-                LOCATION 's3a://warehouse/chainalytics/{table['name']}/'
-            """)
-            logger.info(f"✓ Table {table['name']} created/verified")
-        except Exception as e:
-            logger.error(f"✗ Failed to create table {table['name']}: {e}")
-            raise
-    
-    logger.info("✓ Bootstrap complete")
 
 
 def etl_user_behavior(spark: SparkSession) -> None:
@@ -328,7 +243,6 @@ def main() -> None:
     
     try:
         spark = create_spark_session()
-        bootstrap_silver_tables(spark)
         
         # Execute ETL functions
         etl_user_behavior(spark)
