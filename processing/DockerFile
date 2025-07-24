@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 
 # Install additional Python packages
 RUN pip install --no-cache-dir \
+    great-expectations \
     boto3 \
     minio \
     pandas \
